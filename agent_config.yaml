@@ -4,6 +4,9 @@ mcp_servers:
     - run
     - -i
     - --rm
+    - --read-only
+    - --cap-drop=ALL
+    - --security-opt=no-new-privileges
     - mcp/books
     command: docker
     transport: stdio
@@ -12,6 +15,9 @@ mcp_servers:
     - run
     - -i
     - --rm
+    - --read-only
+    - --cap-drop=ALL
+    - --security-opt=no-new-privileges
     - -e
     - TAVILY_API_KEY=$TAVILY_API_KEY
     - mcp/tavily

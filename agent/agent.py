@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import AsyncExitStack
 from typing import Any
 
 from deepagents import create_deep_agent
@@ -27,17 +28,26 @@ from .middleware import (
 
 _CONFIG = os.environ.get("AGENT_CONFIG_PATH", "./agent_config.yaml")
 
+# Keeps MCP client connections alive for the lifetime of the process.
+_exit_stack = AsyncExitStack()
+
 
 async def _build():
     """Build a LangGraph agent from a resolved Configuration."""
     # initialize config
     config: Configuration = load(_CONFIG)
 
+    if not config.model.api_key:
+        raise RuntimeError(
+            "Model API key is not set. "
+            "Set the OPENROUTER_API_KEY environment variable or configure model.api_key in agent_config.yaml."
+        )
+
     # initialize model
     model = ChatOpenAI(
         model=config.model.name,
         base_url=config.model.url,
-        api_key=config.model.api_key or "dummy",
+        api_key=config.model.api_key,
         temperature=config.model.temperature,
         max_tokens=config.model.max_tokens,
         use_responses_api=False,
@@ -49,6 +59,7 @@ async def _build():
     if config.mcp_servers:
         mcp_servers = {name: server.model_dump(exclude_none=True) for name, server in config.mcp_servers.items()}
         client = MultiServerMCPClient(mcp_servers)
+        await _exit_stack.enter_async_context(client)
         tools = await client.get_tools()
 
     # initialize middleware
@@ -58,7 +69,7 @@ async def _build():
         middleware.append(build_system_prompt_addition_middleware(addition))
 
     # initialize backend
-    backend = LocalShellBackend(root_dir=os.getcwd(), virtual_mode=True, inherit_env=True)
+    backend = LocalShellBackend(root_dir=os.getcwd(), virtual_mode=True, inherit_env=False)
 
     # initialize agent
     return create_deep_agent(
@@ -70,4 +81,19 @@ async def _build():
     )
 
 
-graph = asyncio.run(_build())
+def _build_sync():
+    """Build the agent, handling the case where an event loop is already running."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import nest_asyncio
+
+        nest_asyncio.apply()
+
+    return asyncio.run(_build())
+
+
+graph = _build_sync()
