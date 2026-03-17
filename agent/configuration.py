@@ -14,7 +14,7 @@ class Model(BaseModel):
     api_key: None | str = Field(None, description="The API key to use for the model")
     temperature: float = Field(0.5, ge=0.0, le=1.0, description="The temperature to use for the model")
     top_p: float | None = Field(None, ge=0.0, le=1.0, description="The top p to use for the model")
-    max_tokens: int = Field(None, ge=0.0, description="The maximum number of tokens to generate")
+    max_tokens: int | None = Field(None, ge=1, description="The maximum number of tokens to generate")
 
 
 class MCPServer(BaseModel):
@@ -37,10 +37,14 @@ class MCPServer(BaseModel):
     def _require_command_or_url(self) -> "MCPServer":
         if not self.command and not self.url:
             raise ValueError("MCPServer requires either 'command' (stdio) or 'url' (HTTP)")
-        if self.url and not self.url.startswith("$") and not (
-            self.url.startswith("http://") or self.url.startswith("https://")
-        ):
-            raise ValueError("MCPServer 'url' must start with 'http://' or 'https://'")
+        if self.url is not None:
+            url = self.url.strip()
+            if url == "":
+                raise ValueError("MCPServer 'url' must not be empty")
+            if not url.startswith("$") and not (
+                url.startswith("http://") or url.startswith("https://")
+            ):
+                raise ValueError("MCPServer 'url' must start with 'http://' or 'https://'")
         return self
 
 
@@ -65,10 +69,28 @@ class Configuration(BaseModel):
 
 _ENV_REF_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 
+# Env var names that must be set when referenced. Add names here to enforce fail-fast behaviour.
+_REQUIRED_ENV_VARS: set[str] = {"OPENROUTER_API_KEY", "TAVILY_API_KEY"}
+
 
 def _resolve(value: str) -> str:
-    """Replace $VAR_NAME patterns with values from os.environ. Unset vars resolve to ''."""
-    return _ENV_REF_RE.sub(lambda m: os.environ.get(m.group(1), ""), value)
+    """Replace $VAR_NAME patterns with values from os.environ.
+
+    Raises ``EnvironmentError`` for required variables that are unset or empty.
+    Non-required unset variables resolve to an empty string.
+    """
+
+    def _replacer(m: re.Match) -> str:
+        var = m.group(1)
+        env_val = os.environ.get(var)
+        if var in _REQUIRED_ENV_VARS and not env_val:
+            raise EnvironmentError(
+                f"Required environment variable ${var} is not set. "
+                f"Add it to your .env file or export it in your shell."
+            )
+        return env_val if env_val is not None else ""
+
+    return _ENV_REF_RE.sub(_replacer, value)
 
 
 def _resolve_env_vars(config: Configuration) -> Configuration:
@@ -92,7 +114,7 @@ def _resolve_env_vars(config: Configuration) -> Configuration:
 
 def load(path: str) -> Configuration:
     """Load a YAML config file, resolve $VAR_NAME env refs, and return a validated Configuration."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f.read())
 
     return _resolve_env_vars(Configuration.model_validate(data))
