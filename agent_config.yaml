@@ -1,0 +1,31 @@
+mcp_servers:
+  books:
+    args:
+    - run
+    - -i
+    - --rm
+    - mcp/books
+    command: docker
+    transport: stdio
+  tavily:
+    args:
+    - run
+    - -i
+    - --rm
+    - -e
+    - TAVILY_API_KEY=$TAVILY_API_KEY
+    - mcp/tavily
+    command: docker
+    transport: stdio
+  wikipedia:
+    args:
+    - wikipedia-mcp
+    command: uvx
+    transport: stdio
+model:
+  api_key: $OPENROUTER_API_KEY
+  name: anthropic/claude-sonnet-4.6
+  temperature: 0.5
+  url: https://openrouter.ai/api/v1
+system_prompt: You are a helpful assistant
+tool_prompt_hints: {}

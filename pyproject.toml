@@ -1,0 +1,22 @@
+[project]
+name = "sad-sean-agent-iuy1a"
+version = "0.1.0"
+description = ""
+requires-python = ">=3.12"
+dependencies = [
+    "deepagents~=0.4.0",
+    "langchain~=1.2.10",
+    "langchain-openai~=1.1.9",
+    "langgraph-cli[inmem]~=0.4.12",
+    "pydantic~=2.12.5",
+    "python-dotenv~=1.2.1",
+    "pyyaml~=6.0.3",
+    "langchain-mcp-adapters~=0.2.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["agent*"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
